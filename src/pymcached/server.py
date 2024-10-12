@@ -1,4 +1,6 @@
 import asyncio
+import os
+import time
 
 import uvloop
 
@@ -13,6 +15,8 @@ uvloop.install()
 
 
 _data_storage: dict[str, Data] = {}
+_start_time = int(time.time())
+_pid = os.getpid()
 
 
 async def handle_memcached_client(reader, writer):
@@ -39,6 +43,14 @@ async def handle_memcached_client(reader, writer):
 
                 if command_parts[0] in ["set", "add", "replace"]:
                     expecting_payload = True
+                elif command_parts[0] == "stats":
+                    response = ""
+                    response += f"pid {_pid}\r\n"
+                    response += f"uptime {int(time.time()-_start_time)}\r\n"
+                    response += f"time {int(time.time())}\r\n"
+                    response += "END\r\n"
+                    writer.write(response.encode())
+                    await writer.drain()
                 elif command_parts[0] == "quit":
                     quitted = True
                     break

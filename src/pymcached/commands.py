@@ -94,10 +94,6 @@ def run_version(*_):
     return f"VERSION {__version__}\r\n".encode()
 
 
-def run_stats(data_store, arguments: list[str]):
-    return b"Nothing to be seen here\r\n"
-
-
 def run_incr(data_store, arguments: list[str]):
     _, key, value = arguments
 
