@@ -1,6 +1,9 @@
+import argparse
 import asyncio
 import os
+import socket
 import time
+import logging
 
 import uvloop
 
@@ -8,6 +11,18 @@ from pymcached import commands
 from pymcached.models import Data
 
 uvloop.install()
+
+
+stream_handler = logging.StreamHandler()
+logging.basicConfig(
+    handlers=[stream_handler],
+    format="%(asctime)s - %(name)s:%(lineno)d - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 # COMMANDS: set, add, replace. get.:q
@@ -25,6 +40,8 @@ async def handle_memcached_client(reader, writer):
     noreply = False
     command_parts = []
     quitted = False
+
+    logger.debug('Received connection from %s', writer.get_extra_info('peername'))
 
     while True and not quitted:
         data = await reader.read(1024)
@@ -80,12 +97,43 @@ async def handle_memcached_client(reader, writer):
     await writer.wait_closed()
 
 
-async def main():
-    server = await asyncio.start_server(handle_memcached_client, "127.0.0.1", 11211)
+async def main(address: str, port: int):
+    server = await asyncio.start_server(handle_memcached_client, address, port)
     async with server:
+        logger.info(f'Listening on {address}:{port}')
         await server.serve_forever()
 
     await server.wait_closed()
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-p", "--port", help="Port to listen on", type=int, default=11211
+    )
+    parser.add_argument(
+        "-l", "--address", help="Address to listen on", default="127.0.0.1"
+    )
+    parser.add_argument(
+        "-v", "--verbose", help="Show verbose messages", action="store_true"
+    )
+
+    arguments = parser.parse_args()
+
+    if arguments.verbose:
+        logger.setLevel(logging.DEBUG)
+
+    if arguments.port < 1 or arguments.port > 65535:
+        msg = "Port must be in range 1-65535"
+        raise ValueError(msg)
+
+    network_addresses = [
+        i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None)
+    ]
+    network_addresses.append("127.0.0.1")
+
+    if arguments.address not in network_addresses:
+        msg = "Address must be one of {}"
+        raise ValueError(msg.format(",".join(network_addresses)))
+
+    asyncio.run(main(arguments.address, arguments.port))
